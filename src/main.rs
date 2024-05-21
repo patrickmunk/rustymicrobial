@@ -55,6 +55,13 @@ enum RustyMicro {
         #[structopt(short = "o", long = "output", help = "Output file")]
         output: String,
     },
+    #[structopt(name = "codonextractor")]
+    CodonExtractor {
+        #[structopt(short = "i", long = "input", help = "Input file")]
+        input: String,
+        #[structopt(short = "o", long = "output", help = "Output file")]
+        output: String,
+    },
     // Add other subcommands here...
 }
 
@@ -259,6 +266,42 @@ fn main() {
                         writer.write_record(&flank_record).unwrap();
                     }
                 }
+            }
+        },
+        RustyMicro::CodonExtractor { input, output } => {
+            let reader = fasta::Reader::from_file(&input).unwrap();
+            let mut writer = File::create(&output).unwrap();
+
+            // Generate all possible codons
+            let bases = vec!['A', 'T', 'C', 'G'];
+            let mut all_codons = Vec::new();
+            for a in &bases {
+                for b in &bases {
+                    for c in &bases {
+                        all_codons.push(format!("{}{}{}", a, b, c));
+                    }
+                }
+            }
+
+            writeln!(writer, "name\t{}", all_codons.join("\t")).unwrap();
+
+            for result in reader.records() {
+                let record = result.unwrap();
+                let dna_seq = record.seq();
+                let mut counts = HashMap::new();
+
+                for codon in dna_seq.chunks(3) {
+                    if codon.len() == 3 {
+                        let codon_str = std::str::from_utf8(codon).unwrap();
+                        *counts.entry(codon_str.to_string()).or_insert(0) += 1;
+                    }
+                }
+
+                write!(writer, "{}", record.id()).unwrap();
+                for codon in &all_codons {
+                    write!(writer, "\t{}", counts.get(codon).unwrap_or(&0)).unwrap();
+                }
+                writeln!(writer).unwrap();
             }
         },
         // Handle other subcommands here...
